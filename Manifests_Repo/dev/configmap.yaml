@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: whoami-goapp-config
+  namespace: dev
+data:
+  environment: "dev"
+  log_level: "info"

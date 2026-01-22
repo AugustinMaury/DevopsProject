@@ -1,0 +1,89 @@
+controller:
+  admin: 
+    username: "admin"
+    password: "admin123"
+  
+  serviceType: ClusterIP
+  servicePort: 8080
+  
+  ingress:
+    enabled: true
+    apiVersion: "networking.k8s.io/v1"
+    annotations:
+      kubernetes.io/ingress.class: nginx
+      nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    hostName: jenkins.local
+    path: /
+    pathType: Prefix
+  
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "1Gi"
+    limits:
+      cpu: "2000m"
+      memory: "4Gi"
+  
+  installPlugins:
+    - kubernetes:latest
+    - workflow-aggregator:latest
+    - git:latest
+    - configuration-as-code:latest
+    - docker-workflow:latest
+    - pipeline-stage-view:latest
+    - blueocean:latest
+    - job-dsl:latest
+    - credentials-binding:latest
+    - gitea:latest
+  
+  JCasC:
+    defaultConfig: true
+    configScripts:
+      welcome-message: |
+        jenkins:
+          systemMessage: "Jenkins configuré pour Kubernetes avec ArgoCD!"
+      
+      credentials: |
+        credentials:
+          system:
+            domainCredentials:
+              - credentials:
+                  - usernamePassword:
+                      scope: GLOBAL
+                      id: "gitea-credentials"
+                      username: "admin"
+                      password: "admin123"
+                      description: "Gitea credentials for repository access"
+      
+      jobs: |
+        jobs:
+          - script: >
+              pipelineJob('whoami-cicd-pipeline') {
+                description('CI/CD Pipeline for whoami-goapp - Build, Push to Registry, Deploy with ArgoCD')
+                
+                properties {
+                  disableConcurrentBuilds()
+                }
+                
+                definition {
+                  cpsScm {
+                    scm {
+                      git {
+                        remote {
+                          url('http://gitea-http.infra.svc.cluster.local:3000/admin/App_Repo.git')
+                          credentials('gitea-credentials')
+                        }
+                        branches('*/master')
+                      }
+                    }
+                    scriptPath('Jenkinsfile')
+                  }
+                }
+              }
+  
+  agent:
+    enabled: true
+    
+persistence:
+  enabled: true
+  size: 10Gi

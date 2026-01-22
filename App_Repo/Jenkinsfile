@@ -1,0 +1,159 @@
+pipeline {
+    agent {
+        kubernetes {
+            yaml '''
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    jenkins: agent
+spec:
+  serviceAccountName: jenkins
+  containers:
+  - name: docker
+    image: docker:24-dind
+    command:
+    - dockerd
+    - --host=unix:///var/run/docker.sock
+    - --host=tcp://0.0.0.0:2375
+    - --insecure-registry=kind-registry:5000
+    securityContext:
+      privileged: true
+    volumeMounts:
+    - name: docker-storage
+      mountPath: /var/lib/docker
+  - name: git
+    image: alpine/git:latest
+    command:
+    - cat
+    tty: true
+  volumes:
+  - name: docker-storage
+    emptyDir: {}
+'''
+        }
+    }
+    
+    options {
+        skipDefaultCheckout(true)
+    }
+    
+    environment {
+        REGISTRY = 'kind-registry:5000'
+        IMAGE_NAME = 'whoami-goapp'
+        
+        SOURCE_REPO = 'http://gitea-http.infra.svc.cluster.local:3000/admin/App_Repo.git'
+        MANIFEST_REPO = 'http://gitea-http.infra.svc.cluster.local:3000/admin/Manifests_Repo.git'
+    }
+    
+    stages {
+        stage('Checkout Source') {
+            steps {
+                echo "Cloning source code..."
+                git url: "${SOURCE_REPO}",
+                    branch: 'master',
+                    credentialsId: 'gitea-credentials'
+                
+                script {
+                    sh 'ls -la'
+                }
+            }
+        }
+
+        stage('Wait for Docker') {
+            steps {
+                container('docker') {
+                    echo "Waiting for Docker daemon to be ready..."
+                    script {
+                        sh '''
+                            sleep 15
+                        '''
+                    }
+                }
+            }
+        }
+        
+        stage('Build Docker Image') {
+            steps {
+                container('docker') {
+                    echo "Building Docker image..."
+                    script {
+                        sh """
+                            docker build -t ${REGISTRY}/${IMAGE_NAME}:${BUILD_NUMBER} .
+                            docker tag ${REGISTRY}/${IMAGE_NAME}:${BUILD_NUMBER} ${REGISTRY}/${IMAGE_NAME}:latest
+                        """
+                        
+                        echo "Image built: ${REGISTRY}/${IMAGE_NAME}:${BUILD_NUMBER}"
+                    }
+                }
+            }
+        }
+        
+        stage('Push to Registry') {
+            steps {
+                container('docker') {
+                    echo "Pushing image to registry..."
+                    script {
+                        sh """
+                            docker push ${REGISTRY}/${IMAGE_NAME}:${BUILD_NUMBER}
+                            docker push ${REGISTRY}/${IMAGE_NAME}:latest
+                        """
+                        
+                        echo "Image pushed: ${REGISTRY}/${IMAGE_NAME}:${BUILD_NUMBER}"
+                    }
+                }
+            }
+        }
+        
+        stage('Update Kubernetes Manifest') {
+            steps {
+                container('git') {
+                    echo "Updating Kubernetes manifest..."
+                    withCredentials([
+                        usernamePassword(
+                            credentialsId: 'gitea-credentials',
+                            usernameVariable: 'GIT_USER',
+                            passwordVariable: 'GIT_PASS'
+                        )
+                    ]) {
+
+                        sh '''
+                            git clone http://$GIT_USER:$GIT_PASS@gitea-http.infra.svc.cluster.local:3000/admin/Manifests_Repo.git manifests
+                            cd manifests
+
+                            git config user.email "jenkins@efrei.fr"
+                                git config user.name "Jenkins CI"
+                        '''
+
+                        sh """
+                            cd manifests
+                            sed -i 's|image: kind-registry:5000/whoami-goapp:.*|image: kind-registry:5000/whoami-goapp:${BUILD_NUMBER}|' dev/deployment.yaml
+
+                            echo "Updated deployment.yaml:"
+                            grep "image:" dev/deployment.yaml
+                        """
+
+                        sh '''
+                            cd manifests
+                            git add dev/deployment.yaml
+                            git commit -m "Update whoami-goapp to build ''' + BUILD_NUMBER + '''"
+
+                            git push http://$GIT_USER:$GIT_PASS@gitea-http.infra.svc.cluster.local:3000/admin/Manifests_Repo.git master
+                        '''
+                    }
+                    echo "Manifest updated and pushed!"
+                }
+            }
+        }
+        
+    }
+    
+    post {
+        success {
+            echo "Pipeline completed successfully!"
+        }
+        failure {
+            echo "Pipeline failed. Check logs above for errors."
+        }
+    }
+}

@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: whoami-goapp
+  namespace: dev
+  labels:
+    app: whoami-goapp
+    environment: dev
+spec:
+  type: ClusterIP
+  selector:
+    app: whoami-goapp
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+    protocol: TCP
+  sessionAffinity: None
