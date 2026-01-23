@@ -35,6 +35,7 @@ controller:
     - job-dsl:latest
     - credentials-binding:latest
     - gitea:latest
+    - generic-webhook-trigger:latest
   
   JCasC:
     defaultConfig: true
@@ -63,6 +64,23 @@ controller:
                 
                 properties {
                   disableConcurrentBuilds()
+                  pipelineTriggers {
+                    triggers {
+                      GenericTrigger {
+                        genericVariables {
+                          genericVariable {
+                            key('ref')
+                            value('\$.ref')
+                          }
+                        }
+                        token('whoami-trigger-token')
+                        printContributedVariables(true)
+                        printPostContent(true)
+                        regexpFilterText('\$ref')
+                        regexpFilterExpression('^refs/heads/(master|main)\$')
+                      }
+                    }
+                  }
                 }
                 
                 definition {
