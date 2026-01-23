@@ -101,7 +101,8 @@ Dans les fichiers de config pour Gitea et Jenkins, on crée les credentials :
 - **Username** : `admin`
 - **Password** : `admin123`
 
-Dans le fichier config de Jenkins, on crée automatiquement le job pour la pipeline et on ajoute les credentials de Gitea.
+Dans le fichier config de Jenkins, on crée automatiquement le job pour la pipeline et on ajoute les credentials de Gitea + le trigger de la pipeline (push sur le repo).\
+Dans le fichier config de Gitea, on ajoute la liste des adresses qui peuvent communiquer avec gitea (dans notre cas, tout le cluster)
 
 ---
 
@@ -186,6 +187,13 @@ Dockerfile
 main.go
 go.mod
 ```
+Il faut rajouter le webhook pour trigger la pipeline : Settings > Webhooks > Add Webhook > Gitea
+
+Target URL : 
+```
+http://jenkins.infra.svc.cluster.local:8080/generic-webhook-trigger/invoke?token=whoami-trigger-token
+```
+rien d'autre à changer pour créer le webhook.
 
 ### Manifests_Repo
 

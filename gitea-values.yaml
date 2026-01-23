@@ -3,6 +3,10 @@ gitea:
     username: admin
     password: admin123
     email: admin@example.com
+  config:
+    webhook:
+      ALLOWED_HOST_LIST: "*.svc.cluster.local,10.0.0.0/8"
+
 
 service:
   http:
