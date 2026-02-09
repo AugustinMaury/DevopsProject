@@ -56,8 +56,6 @@ kubectl config set-context --current --namespace=infra
 
 ## 3 - Installation de Gitea, Jenkins et Nginx (ingress controller)
 
-> À installer dans le namespace `infra`
-
 Si vous ne voulez pas gérer l'ingress et passer par des port-forward : skip l'installation de Nginx.
 
 ### Ajout des repos Helm
@@ -88,11 +86,6 @@ helm install jenkins jenkins/jenkins -f .\jenkins-values.yaml
 ```
 ```bash
 helm install ingress-nginx ingress-nginx/ingress-nginx -f ingress-nginx-values.yaml -n ingress-nginx
-```
-
-### Application des règles d'ingress
-```bash
-kubectl apply -f ingress-rules.yaml
 ```
 
 ### Credentials par défaut
@@ -152,6 +145,11 @@ docker run -d --restart=no --name kind-registry --network kind -p 5000:5000 regi
 ## 7 - Ingress config
 
 Si vous avez skip l'installation de l'ingress controller, faire cette étape à la place : [Port-forwards](#port-forwards)
+
+### Application des règles d'ingress
+```bash
+kubectl apply -f ingress-rules.yaml
+```
 
 ### Modification du fichier hosts
 
@@ -214,10 +212,7 @@ prod/
 
 ### Connexion
 
-| Champ | Valeur |
-|-------|--------|
-| Username | `admin` |
-| Password | Voir commande ci-dessous |
+username : `admin`
 
 Récupérer le mot de passe à décoder (encodé en base64) :
 ```bash
@@ -241,21 +236,15 @@ argocd login localhost:8081 --insecure
 argocd repo add http://gitea-http.infra.svc.cluster.local:3000/admin/Manifests_Repo.git --username admin --password admin123 --insecure-skip-server-verification
 ```
 
-### Création de l'application
+### Création des applications dev et prod
 ```bash
-argocd app create whoami-goapp-dev --repo http://gitea-http.infra.svc.cluster.local:3000/admin/Manifests_Repo.git --path dev --dest-server https://kubernetes.default.svc --dest-namespace dev --sync-policy automated --auto-prune --self-heal
+kubectl apply -f argocd-apps.yaml
 ```
 
 Sync l'app quand la pipeline passe (pour pas attendre 5 minutes pour qu'ArgoCD update) :
 ```bash
 argocd app sync whoami-goapp-dev
 ```
-
----
-
-## TODO
-
-- [ ] Config webhook Gitea pour lancer la pipeline Jenkins automatiquement
 
 ---
 
@@ -286,3 +275,21 @@ kubectl port-forward svc/whoami-goapp -n dev 8082:80
 ```
 
 Continuer la config : [Configuration des repositories](#8---configuration-des-repositories)
+
+
+
+
+** a structurer :**
+PAS NECESSAIRE MAIS COOL
+argo cd webhook au lieu de check toutes les 5 min
+créer le webhook dans gitea
+http://argocd-server.argocd.svc.cluster.local/api/webhook
+créer un certificat argocd
+1)
+port forward argo:
+kubectl port-forward svc/argocd-server -n argocd 8443:443
+dans git bash
+openssl s_client -connect localhost:8443 -showcerts </dev/null 2>/dev/null | sed -n '/-----BEGIN/,/-----END/p' > argocd.crt
+crée un secret avec kubectl
+kubectl create secret generic argocd-cert --from-file=argocd.crt
+update le gitea yaml 

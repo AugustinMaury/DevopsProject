@@ -1,0 +1,38 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: whoami-goapp-dev
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: http://gitea-http.infra.svc.cluster.local:3000/admin/Manifests_Repo.git
+    path: dev
+    targetRevision: HEAD
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: dev
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: whoami-goapp-prod
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: http://gitea-http.infra.svc.cluster.local:3000/admin/Manifests_Repo.git
+    path: prod
+    targetRevision: HEAD
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: prod
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

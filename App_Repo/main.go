@@ -17,7 +17,7 @@ func main() {
 }
 
 func whoAmI(response http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(response, "c'est Papus et Romain!")
+	fmt.Fprintf(response, "c'est papus et Oscar! hehe")
 	fmt.Println("Endpoint Hit: whoami")
 }
 
