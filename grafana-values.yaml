@@ -1,0 +1,16 @@
+grafana:
+  adminUser: admin
+  adminPassword: admin123
+
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    hosts:
+      - grafana.local
+    paths:
+      - /
+    pathType: Prefix
+
+  service:
+    type: ClusterIP
+    port: 80

@@ -246,6 +246,28 @@ Sync l'app quand la pipeline passe (pour pas attendre 5 minutes pour qu'ArgoCD u
 argocd app sync whoami-goapp-dev
 ```
 
+### Création du webhook pour trigger un sync argocd
+
+Ajouter un hook dans le ManifestsRepo avec l'url suivante : 
+```bash
+http://argocd-server.argocd.svc.cluster.local/api/webhook
+```
+
+Créer le certificat ArgoCD:
+```bash
+kubectl port-forward svc/argocd-server -n argocd 8443:443
+```
+Puis dans GitBash :
+
+```bash
+openssl s_client -connect localhost:8443 -showcerts </dev/null 2>/dev/null | sed -n '/-----BEGIN/,/-----END/p' > argocd.crt
+```
+
+Puis crée un secret avec kubectl :
+
+```bash
+kubectl create secret generic argocd-cert --from-file=argocd.crt
+```
 ---
 
 ## Port-forwards
@@ -278,18 +300,19 @@ Continuer la config : [Configuration des repositories](#8---configuration-des-re
 
 
 
+Monitoring
 
-** a structurer :**
-PAS NECESSAIRE MAIS COOL
-argo cd webhook au lieu de check toutes les 5 min
-créer le webhook dans gitea
-http://argocd-server.argocd.svc.cluster.local/api/webhook
-créer un certificat argocd
-1)
-port forward argo:
-kubectl port-forward svc/argocd-server -n argocd 8443:443
-dans git bash
-openssl s_client -connect localhost:8443 -showcerts </dev/null 2>/dev/null | sed -n '/-----BEGIN/,/-----END/p' > argocd.crt
-crée un secret avec kubectl
-kubectl create secret generic argocd-cert --from-file=argocd.crt
-update le gitea yaml 
+ajouter prometheus dans le repo helm 
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+
+install
+helm install monitoring prometheus-community/kube-prometheus-stack -n monitoring --create-namespace
+
+password grafana
+kubectl get secret --namespace monitoring -l app.kubernetes.io/component=admin-secret -o jsonpath="{.items[0].data.admin-password}" | base64 --decode ; echo
+
+apply le grafana value 
+
+helm upgrade monitoring prometheus-community/kube-prometheus-stack -n monitoring -f grafana-values.yaml
+AJOUTER grafana.local dans etc/host
+on ne peut que voir la node. Toute l'infra est sur une seule node...
