@@ -10,6 +10,8 @@
 7. [Ingress config](#7---ingress-config)
 8. [Configuration des repositories](#8---configuration-des-repositories)
 9. [Setup de ArgoCD](#9---setup-de-argocd)
+10. [Monitoring](#10---monitoring)
+11. [Logging](#11---logging)
 
 
 ---
@@ -298,21 +300,57 @@ kubectl port-forward svc/whoami-goapp -n dev 8082:80
 
 Continuer la config : [Configuration des repositories](#8---configuration-des-repositories)
 
+---
 
+## 10 - Monitoring
 
-Monitoring
+### Installation
 
-ajouter prometheus dans le repo helm 
+Ajouter le repo Helm Prometheus :
+```bash
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+```
+```bash
+helm install monitoring prometheus-community/kube-prometheus-stack -n monitoring -f grafana-values.yaml
+```
 
-install
-helm install monitoring prometheus-community/kube-prometheus-stack -n monitoring --create-namespace
+Ajouter `grafana.local` dans `etc/hosts` pour l'ingress.
 
-password grafana
-kubectl get secret --namespace monitoring -l app.kubernetes.io/component=admin-secret -o jsonpath="{.items[0].data.admin-password}" | base64 --decode ; echo
 
-apply le grafana value 
 
-helm upgrade monitoring prometheus-community/kube-prometheus-stack -n monitoring -f grafana-values.yaml
-AJOUTER grafana.local dans etc/host
-on ne peut que voir la node. Toute l'infra est sur une seule node...
+### Alerting
+
+Créer le secret SMTP pour l'alertmanager :
+```bash
+kubectl create secret generic alertmanager-smtp --from-literal=password='aaaa aaaa aaaa aaaa' -n monitoring
+```
+
+Remplacer `aaaa aaaa aaaa aaaa` par un vrai app password.
+
+### Tester l'alerting
+
+Lancer un pod qui échoue :
+```bash
+kubectl run test-fail --image=busybox -n infra -- /bin/sh -c "exit 1"
+```
+
+Attendre 2 minutes, puis supprimer le pod :
+```bash
+kubectl delete pod test-fail
+```
+
+---
+
+## 11 - Logging
+
+### Installation de Loki
+
+```bash
+helm repo add grafana https://grafana.github.io/helm-charts
+```
+```bash
+helm repo update
+```
+```bash
+helm install loki grafana/loki -n monitoring -f loki-values.yaml
+```

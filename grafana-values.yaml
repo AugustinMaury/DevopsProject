@@ -2,6 +2,9 @@ grafana:
   adminUser: admin
   adminPassword: admin123
 
+  image:
+    tag: "11.4.0" 
+
   ingress:
     enabled: true
     ingressClassName: nginx
@@ -14,3 +17,129 @@ grafana:
   service:
     type: ClusterIP
     port: 80
+
+alertmanager:
+  config:
+    global:
+      smtp_smarthost: 'smtp.gmail.com:587'
+      smtp_from: 'augustinmaury32@gmail.com'
+      smtp_auth_username: 'augustinmaury32@gmail.com'
+      smtp_auth_password_file: /etc/alertmanager/secrets/alertmanager-smtp/password
+      smtp_require_tls: true
+      resolve_timeout: 5m
+
+    route:
+      group_by: ['alertname', 'namespace']
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 4h
+      receiver: 'email'
+      routes:
+        - receiver: 'null'
+          matchers:
+            - alertname = "Watchdog"
+
+    receivers:
+      - name: 'null'
+      - name: 'email'
+        email_configs:
+          - to: 'augustinmaury32@gmail.com'
+            send_resolved: true
+            headers:
+              subject: '[{{ .Status | toUpper }}] {{ .GroupLabels.alertname }} - {{ .GroupLabels.namespace }}'
+            html: |
+              <h2>Alerte Kubernetes</h2>
+              {{ range .Alerts }}
+              <hr>
+              <b>Alerte :</b> {{ .Labels.alertname }}<br>
+              <b>Sévérité :</b> {{ .Labels.severity }}<br>
+              <b>Namespace :</b> {{ .Labels.namespace }}<br>
+              <b>Pod :</b> {{ .Labels.pod }}<br>
+              <b>Message :</b> {{ .Annotations.description }}<br>
+              <b>Début :</b> {{ .StartsAt.Format "2006-01-02 15:04:05" }}<br>
+              {{ if .EndsAt }}
+              <b>Résolu à :</b> {{ .EndsAt.Format "2006-01-02 15:04:05" }}<br>
+              {{ end }}
+              {{ end }}
+
+    inhibit_rules:
+      - target_matchers:
+          - severity =~ warning|info
+        source_matchers:
+          - severity = critical
+        equal:
+          - namespace
+          - alertname
+
+  alertmanagerSpec:
+    secrets:
+      - alertmanager-smtp
+    alertmanagerConfigMatcherStrategy:
+      type: None
+
+defaultRules:
+  rules:
+    node: true
+
+additionalPrometheusRulesMap:
+  custom-thresholds:
+    groups:
+      - name: custom.node.cpu
+        rules:
+          - alert: HighCPUWarning
+            expr: (1 - avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m]))) * 100 > 60
+            for: 2m
+            labels:
+              severity: warning
+            annotations:
+              summary: "CPU élevé sur {{ $labels.instance }}"
+              description: "CPU à {{ $value | printf \"%.0f\" }}%"
+
+          - alert: HighCPUCritical
+            expr: (1 - avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m]))) * 100 > 95
+            for: 2m
+            labels:
+              severity: critical
+            annotations:
+              summary: "CPU critique sur {{ $labels.instance }}"
+              description: "CPU à {{ $value | printf \"%.0f\" }}%"
+
+      - name: custom.node.memory
+        rules:
+          - alert: HighMemoryWarning
+            expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 60
+            for: 2m
+            labels:
+              severity: warning
+            annotations:
+              summary: "RAM élevée sur {{ $labels.instance }}"
+              description: "RAM à {{ $value | printf \"%.0f\" }}%"
+
+          - alert: HighMemoryCritical
+            expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 95
+            for: 2m
+            labels:
+              severity: critical
+            annotations:
+              summary: "RAM critique sur {{ $labels.instance }}"
+              description: "RAM à {{ $value | printf \"%.0f\" }}%"
+
+      - name: custom.pods
+        rules:
+          - alert: PodNotRunning
+            expr: kube_pod_status_phase{phase=~"Failed|Unknown|Pending"} == 1
+            for: 2m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Pod {{ $labels.pod }} en erreur"
+              description: "Le pod {{ $labels.pod }} dans le namespace {{ $labels.namespace }} est en phase {{ $labels.phase }} depuis plus de 2 minutes."
+
+          - alert: PodCrashLooping
+            expr: rate(kube_pod_container_status_restarts_total[15m]) * 60 * 15 > 3
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Pod {{ $labels.pod }} crash loop"
+              description: "Le container {{ $labels.container }} du pod {{ $labels.pod }} a redémarré plus de 3 fois en 15 minutes."
